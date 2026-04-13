@@ -127,7 +127,25 @@ cmake -B build -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DSTAR_USE_AVX2=O
   * Shared memory genome loading (`--genomeLoad LoadAndKeep/Remove`) is not supported; only `--genomeLoad NoSharedMemory` (the default) is available
   * `--readFilesCommand` uses temporary files instead of FIFO pipes
 
-**Output compatibility:** All integer count matrices (raw and filtered) are byte-identical to Linux STAR 2.7.11b. The EM multi-mapper probability files (`UniqueAndMult-EM.mtx`) may differ by <0.001% in the last decimal place due to cross-compiler floating-point operation ordering. This does not affect biological results.
+**Compiler performance comparison** (434M reads, cynomolgus macaque, 12 threads):
+
+| Compiler | Mapping Speed | OpenMP | Notes |
+|----------|:------------:|:------:|-------|
+| Linux GCC `-O3` | 728 M/hr | 4.5+ | Reference (upstream STAR) |
+| Windows MSVC `/O2 /GL /LTCG` | 518 M/hr | 2.0 | 1.4x slower than Linux |
+| Windows Intel ICX `/O2` | 500 M/hr | 5.1 | ~3% slower than MSVC |
+
+ICX's OpenMP 5.1 and better auto-vectorizer provide no benefit because STAR's bottleneck is memory-latent suffix array binary search, not vectorizable compute. Both Windows compilers produce identical alignment results.
+
+**Output compatibility** (validated on 434M-read STARsolo dataset):
+
+| Output File | vs Linux (GCC) | MSVC vs ICX |
+|-------------|:--------------:|:-----------:|
+| 19 integer count matrices (raw + filtered) | Byte-identical | Byte-identical |
+| 2 EM probability files (`UniqueAndMult-EM.mtx`) | <0.001% rounding in last decimal | Byte-identical |
+| All statistics (Summary.csv, Features.stats, etc.) | Byte-identical | Byte-identical |
+
+The EM floating-point difference (14 of 9.97M entries in Gene, 22 of 13.87M in GeneFull) is from cross-platform floating-point operation ordering in the EM convergence algorithm. It does not affect biological conclusions — cell counts, UMI counts, gene counts, and filtered matrices are all exact matches.
 
 All platforms - non-standard gcc
 --------------------------------
