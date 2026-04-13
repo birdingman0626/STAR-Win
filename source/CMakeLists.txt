@@ -19,6 +19,9 @@ if(NOT ZLIB_FOUND)
     message(STATUS "System zlib not found, building from source via FetchContent")
     include(FetchContent)
     set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(ZLIB_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    set(ZLIB_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+    set(SKIP_INSTALL_ALL ON CACHE BOOL "" FORCE)
     FetchContent_Declare(
         zlib
         GIT_REPOSITORY https://github.com/madler/zlib.git
@@ -344,6 +347,12 @@ if(MSVC)
     find_package(OpenMP REQUIRED)
     target_link_libraries(STAR PRIVATE OpenMP::OpenMP_CXX)
 
+    # For clang-cl: track OpenMP runtime DLL for packaging
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        get_filename_component(_CLANG_BIN_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
+        set(STAR_RUNTIME_DLLS "${_CLANG_BIN_DIR}/libomp.dll" CACHE INTERNAL "")
+    endif()
+
     # AVX2 SIMD
     if(STAR_USE_AVX2)
         target_compile_options(STAR PRIVATE /arch:AVX2)
@@ -422,8 +431,32 @@ enable_testing()
 add_test(NAME version_check COMMAND STAR --version)
 set_tests_properties(version_check PROPERTIES PASS_REGULAR_EXPRESSION "2\\.7\\.11b")
 
-# ---------- Install ----------
+# ---------- Install & Packaging ----------
 install(TARGETS STAR RUNTIME DESTINATION bin)
+
+# Bundle runtime DLLs alongside the binary for Windows release packaging
+if(WIN32)
+    # Copy runtime DLLs next to STAR.exe after build (for local testing)
+    add_custom_command(TARGET STAR POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E echo "Bundling runtime DLLs..."
+    )
+
+    # clang-cl OpenMP runtime
+    if(DEFINED STAR_RUNTIME_DLLS)
+        foreach(_dll ${STAR_RUNTIME_DLLS})
+            if(EXISTS "${_dll}")
+                add_custom_command(TARGET STAR POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_dll}" "$<TARGET_FILE_DIR:STAR>"
+                    COMMENT "Copying ${_dll}"
+                )
+                install(FILES "${_dll}" DESTINATION bin)
+            endif()
+        endforeach()
+    endif()
+
+    # MSVC runtime — use CMake's built-in InstallRequiredSystemLibraries
+    include(InstallRequiredSystemLibraries)
+endif()
 
 message(STATUS "STAR ${PROJECT_VERSION} build configuration:")
 message(STATUS "  Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
