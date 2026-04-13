@@ -139,13 +139,15 @@ ICX's OpenMP 5.1 and better auto-vectorizer provide no benefit because STAR's bo
 
 **Output compatibility** (validated on 434M-read STARsolo dataset):
 
-| Output File | vs Linux (GCC) | MSVC vs ICX |
-|-------------|:--------------:|:-----------:|
+| Output File | MSVC vs Linux (GCC) | ICX vs Linux (GCC) |
+|-------------|:-------------------:|:------------------:|
 | 19 integer count matrices (raw + filtered) | Byte-identical | Byte-identical |
-| 2 EM probability files (`UniqueAndMult-EM.mtx`) | <0.001% rounding in last decimal | Byte-identical |
+| 2 EM probability files (`UniqueAndMult-EM.mtx`) | 14-22 entries differ | 466-506 entries differ |
 | All statistics (Summary.csv, Features.stats, etc.) | Byte-identical | Byte-identical |
 
-The EM floating-point difference (14 of 9.97M entries in Gene, 22 of 13.87M in GeneFull) is from cross-platform floating-point operation ordering in the EM convergence algorithm. It does not affect biological conclusions — cell counts, UMI counts, gene counts, and filtered matrices are all exact matches.
+The EM differences are in the last decimal place (e.g. `1.99063` vs `1.99062`) of multi-mapper probability weights. MSVC differs in 14 of 9.97M Gene entries and 22 of 13.87M GeneFull entries (<0.001%). ICX differs in 506/466 entries (<0.005%) due to Clang-based floating-point codegen diverging more from GCC. These do not affect biological conclusions — cell counts, UMI counts, gene counts, and all filtered matrices are exact matches across all three compilers.
+
+**Note on speed comparison:** The Linux baseline (728 M/hr) was measured on AMD Ryzen 7 5825U (Zen 3, 16MB L3), while Windows numbers (510-518 M/hr) were on Intel Core Ultra 5 235 (Arrow Lake, 12MB L3). The ~1.4x gap is primarily CPU/cache difference, not compiler difference. MSVC and ICX on the same hardware differ by only ~3%.
 
 All platforms - non-standard gcc
 --------------------------------
