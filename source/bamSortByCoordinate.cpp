@@ -69,7 +69,7 @@ void bamSortByCoordinate (Parameters &P, ReadAlignChunk **RAchunk, Genome &genom
                             boolWait=false;
                             totalMem+=newMem;
                         };
-                        sleep(1); // 等待内存可用 (sleep参数为unsigned int秒)
+                        sleep(1); // wait for memory (sleep takes unsigned int seconds)
                     };
                     BAMbinSortByCoordinate(ibin,binN,binS,P.runThreadN,P.outBAMsortTmpDir, P, genome, solo);
                     #pragma omp critical

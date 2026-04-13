@@ -62,7 +62,8 @@ int ReadAlign::createExtendWindowsWithAlign(uint a1, uint aStr) {
 
 
         if (!flagMergeLeft && !flagMergeRight) {//no merging, a new window was added
-            wB.set(aBin, (uintWinBin)nW); iWin=nW; //add new window ID for now, may change it later
+            wB.set(aBin, (uintWinBin)nW);
+            iWin=nW; //add new window ID for now, may change it later
             WC[iWin][WC_Chr]=mapGen.chrBin[aBin >> P.winBinChrNbits];
             WC[iWin][WC_Str]=aStr;
             WC[iWin][WC_gEnd]=WC[iWin][WC_gStart]=aBin;
