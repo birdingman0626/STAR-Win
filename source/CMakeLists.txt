@@ -7,6 +7,23 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Export compile_commands.json for LSP/IDE support (clangd, ccls)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# ---------- Git commit hash for version string ----------
+find_package(Git QUIET)
+if(GIT_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
+        OUTPUT_VARIABLE GIT_COMMIT_HASH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+endif()
+if(NOT GIT_COMMIT_HASH)
+    set(GIT_COMMIT_HASH "unknown")
+endif()
+# Override STAR_VERSION at compile time: "2.7.11c_<hash>"
+add_compile_definitions(STAR_VERSION="2.7.11c_${GIT_COMMIT_HASH}")
+
 # ---------- Options ----------
 option(STAR_LONG_READS "Build STARlong variant for long reads" OFF)
 # AVX2 is x86-only; auto-disable on ARM/Apple Silicon
