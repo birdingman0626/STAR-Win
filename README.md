@@ -1,4 +1,4 @@
-STAR 2.7.11b (Community Fork)
+STAR 2.7.11c (Community Fork)
 ==========
 Spliced Transcripts Alignment to a Reference
 © Alexander Dobin, 2009-2024
@@ -6,9 +6,10 @@ https://www.ncbi.nlm.nih.gov/pubmed/23104886
 
 > **Fork Notice:** The upstream STAR repository (`alexdobin/STAR`) appears to be unmaintained as of 2025
 > (see [community discussion](https://www.reddit.com/r/bioinformatics/comments/1joyd0p/the_star_aligner_is_unmaintained_now/)).
-> This fork maintains full output compatibility with STAR 2.7.11b while adding **Windows native support**.
+> This fork maintains full output compatibility with STAR 2.7.11b while adding **Windows native support**,
+> **macOS ARM (Apple Silicon) support**, and upstream bug fixes.
 > All changes are validated to produce byte-identical results to the original 2.7.11b release.
-> Development is Vibe Coding driven but output-correctness tested.
+> Release binaries are versioned as `2.7.11c_<commit>` for traceability.
 
 ORIGINAL AUTHOR
 ===============
@@ -77,48 +78,85 @@ cd STAR/source
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
 ```
-Compile under Mac OS X
-----------------------
+Compile under Mac OS X (Intel x86_64)
+--------------------------------------
 
 ```bash
 # 1. Install brew (http://brew.sh/)
 # 2. Install gcc with brew:
-$ brew install gcc
-# 3. Build STAR:
-# run 'make' in the source directory
-# note that the path to c++ executable has to be adjusted to its current version
-$cd source
-$make STARforMacStatic CXX=/usr/local/Cellar/gcc/8.2.0/bin/g++-8
-# 4. Make it availible through the terminal
-$cp STAR /usr/local/bin
+$ brew install gcc ninja
+# 3. Find installed g++ version (e.g. g++-15)
+$ GCC_BIN=$(ls $(brew --prefix gcc)/bin/g++-* | sort -V | tail -1)
+$ GCC_VER=$(basename "$GCC_BIN" | grep -oE '[0-9]+$')
+# 4. Build with CMake (must specify both C and CXX to get OpenMP)
+$ cd STAR/source
+$ cmake -B build -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_C_COMPILER=$(brew --prefix gcc)/bin/gcc-${GCC_VER} \
+    -DCMAKE_CXX_COMPILER=${GCC_BIN}
+$ cmake --build build
+```
+
+Compile under macOS ARM (Apple Silicon / M-series)
+---------------------------------------------------
+
+Same as above. AVX2 is automatically disabled on ARM; the build uses the bundled SIMDe library for SIMD emulation.
+
+```bash
+$ brew install gcc ninja
+$ GCC_BIN=$(ls $(brew --prefix gcc)/bin/g++-* | sort -V | tail -1)
+$ GCC_VER=$(basename "$GCC_BIN" | grep -oE '[0-9]+$')
+$ cd STAR/source
+$ cmake -B build -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_C_COMPILER=$(brew --prefix gcc)/bin/gcc-${GCC_VER} \
+    -DCMAKE_CXX_COMPILER=${GCC_BIN}
+$ cmake --build build
 ```
 
 Compile under Windows (MSVC)
 ----------------------------
 
 STAR can be built natively on Windows using Microsoft Visual C++ and CMake.
+Ninja is the recommended generator — it parallelizes compilation and is faster than NMake.
 
 ```bash
-# 1. Open "x64 Native Tools Command Prompt for VS"
+# 1. Open "x64 Native Tools Command Prompt for VS 2022"
 # 2. Navigate to STAR source directory
 cd STAR\source
 
-# 3. Configure and build with CMake (zlib is fetched automatically)
-cmake -B build -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release
-cd build
-nmake
+# 3. Configure and build with CMake + Ninja (zlib is fetched automatically)
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build
 
-# 4. The resulting STAR.exe is in the build directory
-STAR.exe --version
+# 4. The resulting STAR.exe is in build\
+build\STAR.exe --version
 ```
 
 Build options:
 ```bash
 # Build STARlong variant for long reads
-cmake -B build -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DSTAR_LONG_READS=ON
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSTAR_LONG_READS=ON
 
-# Disable AVX2 (for older processors)
-cmake -B build -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DSTAR_USE_AVX2=OFF
+# Disable AVX2 (for older or ARM processors)
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSTAR_USE_AVX2=OFF
+
+# Enable AddressSanitizer for debugging
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DSTAR_ASAN=ON
+```
+
+Compile under Windows (Intel oneAPI ICX)
+-----------------------------------------
+
+Intel ICX provides OpenMP 5.1 (vs MSVC's 2.0) but benchmarks show similar throughput
+since STAR's bottleneck is memory-latent suffix array search.
+
+```bash
+# 1. Open "Intel oneAPI Command Prompt for Intel 64 for Visual Studio 2022"
+# 2. Navigate to STAR source directory
+cd STAR\source
+cmake -B build-icx -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=icx -DCMAKE_C_COMPILER=icx
+cmake --build build-icx
 ```
 
 **Benchmarked performance** (434M reads, STARsolo CB_UMI_Simple, cynomolgus macaque genome):

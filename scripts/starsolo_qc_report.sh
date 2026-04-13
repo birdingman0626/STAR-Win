@@ -58,9 +58,8 @@ if [ -f "$feat_gene_file" ]; then
     feat_Assigned=$(grep "yesWLmatch|yessubWLmatch|Assigned" "$feat_gene_file" | tail -1 | awk '{print $2}')
 fi
 
-# Parse STAR version and command from Log.out
+# Parse STAR version and run configuration from Log.out
 star_version=$(grep "STAR version=" "$SOLO_DIR/Log.out" 2>/dev/null | head -1 | sed "s/.*=//")
-star_command=$(grep "^##### Command Line:" -A1 "$SOLO_DIR/Log.out" 2>/dev/null | tail -1 | sed "s/^ *//")
 star_genomedir=$(grep "genomeDir " "$SOLO_DIR/Log.out" 2>/dev/null | head -1 | awk '{print $NF}')
 star_threads=$(grep "runThreadN " "$SOLO_DIR/Log.out" 2>/dev/null | grep "RE-DEFINED" | awk '{print $2}')
 
@@ -133,7 +132,7 @@ HTMLEOF
 
 cat >> "$OUT_HTML" << EOF
 <h1>STARsolo QC Report</h1>
-<p class="subtitle">Generated $(date '+%Y-%m-%d %H:%M') | $SOLO_DIR</p>
+<p class="subtitle">Generated $(date '+%Y-%m-%d %H:%M')</p>
 
 <h2>Run Configuration</h2>
 <table>
@@ -142,7 +141,6 @@ cat >> "$OUT_HTML" << EOF
 <tr><td>Genome Directory</td><td>$star_genomedir</td></tr>
 <tr><td>Threads</td><td>$star_threads</td></tr>
 </table>
-<details><summary>Full Command Line</summary><pre style="white-space:pre-wrap;font-size:0.8rem">$star_command</pre></details>
 
 <h2>Run Overview</h2>
 <div class="grid">
