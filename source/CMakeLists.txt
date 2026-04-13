@@ -446,6 +446,12 @@ enable_testing()
 add_test(NAME version_check COMMAND STAR --version)
 set_tests_properties(version_check PROPERTIES PASS_REGULAR_EXPRESSION "2\\.7\\.11")
 
+option(STAR_BUILD_TESTS "Build unit tests (requires network access for doctest)" ON)
+if(STAR_BUILD_TESTS)
+    set(STAR_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+    add_subdirectory(${CMAKE_SOURCE_DIR}/../test ${CMAKE_BINARY_DIR}/test)
+endif()
+
 # ---------- Install & Packaging ----------
 install(TARGETS STAR RUNTIME DESTINATION bin)
 

@@ -31,13 +31,16 @@ jobs:
           if [ "${{ matrix.compiler }}" = "clang" ]; then
             export CC=clang CXX=clang++
           fi
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSTAR_BUILD_TESTS=ON
           cmake --build build
 
       - name: Smoke test
         run: |
           ./source/build/STAR --version
           echo "Version check passed"
+
+      - name: Run unit tests
+        run: ctest --test-dir source/build/test --output-on-failure -j4
 
       - name: Upload artifact
         if: matrix.compiler == 'gcc'
@@ -66,11 +69,15 @@ jobs:
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER="${GCC_C_BIN}" \
-            -DCMAKE_CXX_COMPILER="${GCC_BIN}"
+            -DCMAKE_CXX_COMPILER="${GCC_BIN}" \
+            -DSTAR_BUILD_TESTS=ON
           cmake --build build
 
       - name: Smoke test
         run: ./source/build/STAR --version
+
+      - name: Run unit tests
+        run: ctest --test-dir source/build/test --output-on-failure -j4
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -91,11 +98,14 @@ jobs:
       - name: Build with CMake (Ninja)
         run: |
           cd source
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSTAR_BUILD_TESTS=ON
           cmake --build build
 
       - name: Smoke test
         run: source\build\STAR.exe --version
+
+      - name: Run unit tests
+        run: ctest --test-dir source\build\test --output-on-failure -j4
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
