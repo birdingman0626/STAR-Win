@@ -9,7 +9,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # ---------- Options ----------
 option(STAR_LONG_READS "Build STARlong variant for long reads" OFF)
-option(STAR_USE_AVX2 "Enable AVX2 SIMD instructions" ON)
+# AVX2 is x86-only; auto-disable on ARM/Apple Silicon
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64|ARM64")
+    option(STAR_USE_AVX2 "Enable AVX2 SIMD instructions" OFF)
+else()
+    option(STAR_USE_AVX2 "Enable AVX2 SIMD instructions" ON)
+endif()
 option(STAR_FAST_MODE "Aggressive optimizations (may change alignment output)" OFF)
 option(STAR_ASAN "Enable AddressSanitizer" OFF)
 
