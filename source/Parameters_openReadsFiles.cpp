@@ -7,6 +7,10 @@
 #include "wincompat.h"
 #endif
 
+// Large read buffer for ifstream to reduce system call overhead
+// Persistent: must outlive the ifstream that uses it
+static char s_readInBuf[MAX_N_MATES][4 * 1024 * 1024]; // 4MB per mate
+
 void Parameters::openReadsFiles()
 {
     if (readFilesCommandString=="") {//read from file
@@ -17,6 +21,7 @@ void Parameters::openReadsFiles()
             string rfName=readFilesPrefixFinal + readFilesIn.at(ii);
 
             inOut->readIn[ii].open(rfName.c_str()); //try to open the Sequences file right away, exit if failed
+            inOut->readIn[ii].rdbuf()->pubsetbuf(s_readInBuf[ii], sizeof(s_readInBuf[ii])); // 4MB read buffer
             if (inOut->readIn[ii].fail()) {
                 ostringstream errOut;
                 errOut <<"EXITING because of fatal input ERROR: could not open readFilesIn=" << rfName <<"\n";

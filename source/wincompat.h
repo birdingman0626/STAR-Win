@@ -295,30 +295,30 @@ struct FTW {
 #include <stdint.h>
 
 typedef HANDLE pthread_t;
-typedef CRITICAL_SECTION pthread_mutex_t;
+typedef SRWLOCK pthread_mutex_t;
 
 // Simplified attributes (ignored)
 typedef int pthread_attr_t;
 
-#define PTHREAD_MUTEX_INITIALIZER {0}
+#define PTHREAD_MUTEX_INITIALIZER SRWLOCK_INIT
 
 static inline int pthread_mutex_init(pthread_mutex_t *mutex, const void * /*attr*/) {
-    InitializeCriticalSection(mutex);
+    InitializeSRWLock(mutex);
     return 0;
 }
 
-static inline int pthread_mutex_destroy(pthread_mutex_t *mutex) {
-    DeleteCriticalSection(mutex);
+static inline int pthread_mutex_destroy(pthread_mutex_t * /*mutex*/) {
+    // SRW locks require no cleanup
     return 0;
 }
 
 static inline int pthread_mutex_lock(pthread_mutex_t *mutex) {
-    EnterCriticalSection(mutex);
+    AcquireSRWLockExclusive(mutex);
     return 0;
 }
 
 static inline int pthread_mutex_unlock(pthread_mutex_t *mutex) {
-    LeaveCriticalSection(mutex);
+    ReleaseSRWLockExclusive(mutex);
     return 0;
 }
 
@@ -342,9 +342,9 @@ static inline int pthread_create(pthread_t *thread, const pthread_attr_t * /*att
     if (!info) return ENOMEM;
     info->start_routine = start_routine;
     info->arg = arg;
-    // STAR uses large stack arrays in alignment code; use 64MB per thread
-    // (Linux default is 8MB, STAR needs more for deep recursion + stack arrays)
-    *thread = CreateThread(NULL, 64 * 1024 * 1024, _pthread_start_wrapper, info, 0, NULL);
+    // STAR uses large stack arrays in alignment code; use 16MB per thread
+    // (Linux default is 8MB, but STAR benefits from extra headroom)
+    *thread = CreateThread(NULL, 16 * 1024 * 1024, _pthread_start_wrapper, info, 0, NULL);
     if (*thread == NULL) {
         free(info);
         return EAGAIN;

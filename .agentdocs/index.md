@@ -3,6 +3,7 @@
 `workflow/260412-htslib-upgrade.md` - HTSlib 1.3 → 1.21 upgrade plan with Windows patch re-application
 `workflow/260412-cpp-best-practices.md` - C/C++ best practice improvements audit and action items
 `workflow/260412-release-validation-test.md` - Release validation: STARsolo count comparison against orig_count
+`workflow/260412-windows-perf-bottleneck.md` - Windows CPU perf gap plan: 206 → 400+ M/hr (3.5x gap root causes and fixes)
 
 ## Technical Notes
 - STAR uses `pubsetbuf` on `istringstream` to use external buffers; MSVC ignores this. Fixed with `FixedStreamBuf.h`.

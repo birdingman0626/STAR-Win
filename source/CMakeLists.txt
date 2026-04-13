@@ -1,13 +1,16 @@
 cmake_minimum_required(VERSION 3.15)
 project(STAR VERSION 2.7.11 LANGUAGES CXX C)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Export compile_commands.json for LSP/IDE support (clangd, ccls)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # ---------- Options ----------
 option(STAR_LONG_READS "Build STARlong variant for long reads" OFF)
 option(STAR_USE_AVX2 "Enable AVX2 SIMD instructions" ON)
-option(STAR_ASAN "Enable AddressSanitizer (MSVC)" OFF)
+option(STAR_ASAN "Enable AddressSanitizer" OFF)
 
 # ---------- Find or build zlib ----------
 find_package(ZLIB QUIET)
@@ -318,10 +321,13 @@ if(MSVC)
 
     # General MSVC flags
     target_compile_options(STAR PRIVATE
-        /W3 /MP /EHsc /bigobj
+        /W4 /MP /EHsc /bigobj
+        /wd4244 /wd4267 /wd4100 /wd4389 /wd4018 /wd4456 /wd4457  # suppress noisy warnings in upstream code
     )
     if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
-        target_compile_options(STAR PRIVATE /O2)
+        target_compile_options(STAR PRIVATE /O2 /Ob2 /Oi)
+        target_compile_options(STAR PRIVATE /GL)      # Whole-program optimization
+        target_link_options(STAR PRIVATE /LTCG)       # Link-time code generation
     endif()
 
     # Always generate PDB for debugging crash dumps
@@ -338,7 +344,7 @@ if(MSVC)
 
     # Increase stack size to 64MB (STAR uses large stack arrays for read processing)
     # Linux default is 8MB; STAR with STARsolo needs more
-    target_link_options(STAR PRIVATE /STACK:67108864)
+    target_link_options(STAR PRIVATE /STACK:16777216)
 
     # opal uses SIMDe which needs AVX2 and local includes
     set_source_files_properties(
@@ -362,7 +368,18 @@ else()
     endif()
 
     target_link_libraries(STAR PRIVATE pthread)
+
+    # Sanitizer support (GCC/Clang)
+    if(STAR_ASAN)
+        target_compile_options(STAR PRIVATE -fsanitize=address -fno-omit-frame-pointer)
+        target_link_options(STAR PRIVATE -fsanitize=address)
+    endif()
 endif()
+
+# ---------- Testing ----------
+enable_testing()
+add_test(NAME version_check COMMAND STAR --version)
+set_tests_properties(version_check PROPERTIES PASS_REGULAR_EXPRESSION "2\\.7\\.11b")
 
 # ---------- Install ----------
 install(TARGETS STAR RUNTIME DESTINATION bin)
