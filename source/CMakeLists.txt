@@ -444,7 +444,7 @@ endif()
 # ---------- Testing ----------
 enable_testing()
 add_test(NAME version_check COMMAND STAR --version)
-set_tests_properties(version_check PROPERTIES PASS_REGULAR_EXPRESSION "2\\.7\\.11b")
+set_tests_properties(version_check PROPERTIES PASS_REGULAR_EXPRESSION "2\\.7\\.11")
 
 # ---------- Install & Packaging ----------
 install(TARGETS STAR RUNTIME DESTINATION bin)

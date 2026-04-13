@@ -10,6 +10,7 @@ jobs:
   build-linux:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         compiler: [gcc, clang]
     steps:
@@ -22,7 +23,7 @@ jobs:
 
       - name: Install Clang
         if: matrix.compiler == 'clang'
-        run: sudo apt-get install -y clang
+        run: sudo apt-get install -y clang libomp-dev
 
       - name: Build with CMake
         run: |
