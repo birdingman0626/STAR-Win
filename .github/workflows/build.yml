@@ -53,15 +53,18 @@ jobs:
       - name: Install dependencies
         run: |
           brew install gcc ninja
-          # Find the installed g++ version (e.g. g++-14, g++-15)
+          # Resolve exact versioned paths (e.g. g++-15, gcc-15)
           GCC_BIN=$(ls $(brew --prefix gcc)/bin/g++-* | sort -V | tail -1)
+          GCC_VER=$(basename "$GCC_BIN" | grep -oE '[0-9]+$')
           echo "GCC_BIN=${GCC_BIN}" >> $GITHUB_ENV
+          echo "GCC_C_BIN=$(brew --prefix gcc)/bin/gcc-${GCC_VER}" >> $GITHUB_ENV
 
       - name: Build with CMake
         run: |
           cd source
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER="${GCC_C_BIN}" \
             -DCMAKE_CXX_COMPILER="${GCC_BIN}"
           cmake --build build
 
