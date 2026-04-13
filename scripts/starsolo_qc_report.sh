@@ -43,10 +43,26 @@ mapping_speed=$(grep "Mapping speed" "$SOLO_DIR/Log.final.out" | awk -F'|' '{pri
 splices=$(grep "Number of splices: Total" "$SOLO_DIR/Log.final.out" | awk -F'|' '{print $2}' | tr -d ' \t')
 
 # Parse Barcodes.stats
-bc_exact=$(grep "nExactMatch" "$SOLO_DIR/Solo.out/Barcodes.stats" | awk '{print $2}')
-bc_1mm=$(grep "nOneMM" "$SOLO_DIR/Solo.out/Barcodes.stats" | awk '{print $2}')
-bc_noMatch=$(grep "nNoMatch" "$SOLO_DIR/Solo.out/Barcodes.stats" | awk '{print $2}')
+bc_exact=$(grep "yesWLmatchExact" "$SOLO_DIR/Solo.out/Barcodes.stats" | awk '{print $2}')
+bc_1mm=$(grep "yesOneWLmatchWithMM" "$SOLO_DIR/Solo.out/Barcodes.stats" | awk '{print $2}')
+bc_noMatch=$(grep "noNoWLmatch" "$SOLO_DIR/Solo.out/Barcodes.stats" | awk '{print $2}')
 bc_total=$(grep "nNinBarcode\|nUMIhomopolymer\|nTooMany\|nNoMatch\|nExactMatch\|nOneMM" "$SOLO_DIR/Solo.out/Barcodes.stats" | awk '{s+=$2}END{print s}')
+
+# Parse Features.stats
+feat_gene_file="$SOLO_DIR/Solo.out/Gene/Features.stats"
+feat_gf_file="$SOLO_DIR/Solo.out/GeneFull_Ex50pAS/Features.stats"
+if [ -f "$feat_gene_file" ]; then
+    feat_noUnmapped=$(grep "noUnmapped" "$feat_gene_file" | awk '{print $2}')
+    feat_noNoFeature=$(grep "noNoFeature" "$feat_gene_file" | awk '{print $2}')
+    feat_Ambiguous=$(grep "Ambiguous" "$feat_gene_file" | head -1 | awk '{print $2}')
+    feat_Assigned=$(grep "yesWLmatch|yessubWLmatch|Assigned" "$feat_gene_file" | tail -1 | awk '{print $2}')
+fi
+
+# Parse STAR version and command from Log.out
+star_version=$(grep "STAR version=" "$SOLO_DIR/Log.out" 2>/dev/null | head -1 | sed "s/.*=//")
+star_command=$(grep "^##### Command Line:" -A1 "$SOLO_DIR/Log.out" 2>/dev/null | tail -1 | sed "s/^ *//")
+star_genomedir=$(grep "genomeDir " "$SOLO_DIR/Log.out" 2>/dev/null | head -1 | awk '{print $NF}')
+star_threads=$(grep "runThreadN " "$SOLO_DIR/Log.out" 2>/dev/null | grep "RE-DEFINED" | awk '{print $2}')
 
 # Badge helper
 badge() {
@@ -118,6 +134,15 @@ HTMLEOF
 cat >> "$OUT_HTML" << EOF
 <h1>STARsolo QC Report</h1>
 <p class="subtitle">Generated $(date '+%Y-%m-%d %H:%M') | $SOLO_DIR</p>
+
+<h2>Run Configuration</h2>
+<table>
+<tr><th>Parameter</th><th>Value</th></tr>
+<tr><td>STAR Version</td><td>$star_version</td></tr>
+<tr><td>Genome Directory</td><td>$star_genomedir</td></tr>
+<tr><td>Threads</td><td>$star_threads</td></tr>
+</table>
+<details><summary>Full Command Line</summary><pre style="white-space:pre-wrap;font-size:0.8rem">$star_command</pre></details>
 
 <h2>Run Overview</h2>
 <div class="grid">
