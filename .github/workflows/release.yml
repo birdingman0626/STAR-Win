@@ -18,18 +18,12 @@ jobs:
         include:
           - os: ubuntu-latest
             name: Linux
-            artifact_name: STAR-linux-x86_64
-            artifact_path: source/build/STAR
 
           - os: windows-latest
             name: Windows
-            artifact_name: STAR-windows-x86_64
-            artifact_path: source/build/STAR.exe
 
           - os: macos-latest
             name: macOS
-            artifact_name: STAR-macos-aarch64
-            artifact_path: source/build/STAR
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -49,12 +43,24 @@ jobs:
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build
 
+      - name: Package (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cp source/build/STAR STAR-linux-x86_64
+          chmod +x STAR-linux-x86_64
+
+      - name: Upload artifact (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: STAR-linux-x86_64
+          path: STAR-linux-x86_64
+
       # ---- macOS ----
       - name: Install macOS dependencies
         if: matrix.os == 'macos-latest'
         run: |
           brew install gcc ninja
-          # Resolve exact versioned paths (e.g. g++-15, gcc-15)
           GCC_BIN=$(ls $(brew --prefix gcc)/bin/g++-* | sort -V | tail -1)
           GCC_VER=$(basename "$GCC_BIN" | grep -oE '[0-9]+$')
           echo "GCC_BIN=${GCC_BIN}" >> $GITHUB_ENV
@@ -70,6 +76,19 @@ jobs:
             -DCMAKE_CXX_COMPILER="${GCC_BIN}"
           cmake --build build
 
+      - name: Package (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          cp source/build/STAR STAR-macos-aarch64
+          chmod +x STAR-macos-aarch64
+
+      - name: Upload artifact (macOS)
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: STAR-macos-aarch64
+          path: STAR-macos-aarch64
+
       # ---- Windows ----
       - name: Setup MSVC
         if: matrix.os == 'windows-latest'
@@ -84,22 +103,64 @@ jobs:
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build
 
-      # ---- Smoke test & upload ----
-      - name: Smoke test (Unix)
-        if: matrix.os != 'windows-latest'
-        run: ${{ matrix.artifact_path }} --version
+      - name: Package (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          # Staging directory
+          New-Item -ItemType Directory -Force -Path staging | Out-Null
+          Copy-Item source\build\STAR.exe staging\
+
+          # Copy MSVC CRT DLLs (msvcp140, vcruntime140, etc.)
+          $redistDir = $env:VCToolsRedistDir
+          if ($redistDir) {
+            $crtDir = Join-Path $redistDir "x64\Microsoft.VC143.CRT"
+            if (-not (Test-Path $crtDir)) {
+              $crtDir = Get-ChildItem (Join-Path $redistDir "x64") -Filter "Microsoft.VC*.CRT" |
+                        Sort-Object Name -Descending | Select-Object -First 1 -ExpandProperty FullName
+            }
+            if ($crtDir -and (Test-Path $crtDir)) {
+              Copy-Item "$crtDir\msvcp140.dll"      staging\ -ErrorAction SilentlyContinue
+              Copy-Item "$crtDir\vcruntime140.dll"  staging\ -ErrorAction SilentlyContinue
+              Copy-Item "$crtDir\vcruntime140_1.dll" staging\ -ErrorAction SilentlyContinue
+            }
+          }
+
+          # Copy OpenMP runtime (vcomp*.dll)
+          $ompDll = Get-ChildItem "$env:VCToolsRedistDir\x64" -Recurse -Filter "vcomp*.dll" -ErrorAction SilentlyContinue |
+                    Sort-Object Name -Descending | Select-Object -First 1
+          if ($ompDll) {
+            Copy-Item $ompDll.FullName staging\
+          }
+
+          # Show what's in the package
+          Write-Host "=== Package contents ==="
+          Get-ChildItem staging\ | Format-Table Name, Length
+
+          # Zip it up
+          Compress-Archive -Path staging\* -DestinationPath STAR-windows-x86_64.zip
 
       - name: Smoke test (Windows)
         if: matrix.os == 'windows-latest'
-        run: source\build\STAR.exe --version
+        run: staging\STAR.exe --version
 
-      - name: Upload artifact
+      - name: Upload artifact (Windows)
+        if: matrix.os == 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_path }}
+          name: STAR-windows-x86_64
+          path: STAR-windows-x86_64.zip
 
-  # Always create a GitHub Release for workflow_dispatch (with auto tag) or tag pushes
+      # ---- Smoke test (Unix) ----
+      - name: Smoke test (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: ./STAR-linux-x86_64 --version
+
+      - name: Smoke test (macOS)
+        if: matrix.os == 'macos-latest'
+        run: ./STAR-macos-aarch64 --version
+
+  # Always create a GitHub Release
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -108,21 +169,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v4
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
         with:
           merge-multiple: true
+
+      - name: List downloaded files
+        run: ls -lh
 
       - name: Determine release tag
         id: tag
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
-            # Triggered by a git tag push
             echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           elif [ -n "${{ inputs.tag_name }}" ]; then
-            # Explicit tag override from workflow_dispatch input
             echo "tag=${{ inputs.tag_name }}" >> $GITHUB_OUTPUT
           else
-            # Auto-generate: 2.7.11c_<short-sha>
             SHORT_SHA=$(git rev-parse --short HEAD)
             echo "tag=2.7.11c_${SHORT_SHA}" >> $GITHUB_OUTPUT
           fi
@@ -135,5 +197,5 @@ jobs:
           generate_release_notes: true
           files: |
             STAR-linux-x86_64
-            STAR-windows-x86_64.exe
+            STAR-windows-x86_64.zip
             STAR-macos-aarch64
