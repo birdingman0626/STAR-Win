@@ -42,6 +42,20 @@ typedef intptr_t ssize_t;
 #define PATH_MAX 260
 #endif
 
+// SSIZE_MAX
+#ifndef SSIZE_MAX
+#define SSIZE_MAX ((ssize_t)(((size_t)(~0)) >> 1))
+#endif
+
+// Signals
+#include <signal.h>
+#ifndef SIGTERM
+#define SIGTERM 15
+#endif
+#ifndef SIGPIPE
+#define SIGPIPE 13
+#endif
+
 // Standard file descriptors
 #ifndef STDIN_FILENO
 #define STDIN_FILENO 0
@@ -115,8 +129,13 @@ typedef CONDITION_VARIABLE hts_pthread_cond_t;
 
 #define PTHREAD_MUTEX_INITIALIZER {0}
 #define PTHREAD_CREATE_JOINABLE 0
+#define PTHREAD_MUTEX_RECURSIVE 1
 typedef int pthread_condattr_t;
 typedef int pthread_mutexattr_t;
+
+static __inline int pthread_mutexattr_init(pthread_mutexattr_t *attr) { *attr = 0; return 0; }
+static __inline int pthread_mutexattr_settype(pthread_mutexattr_t *attr, int type) { *attr = type; return 0; }
+static __inline int pthread_mutexattr_destroy(pthread_mutexattr_t *attr) { (void)attr; return 0; }
 
 static __inline int pthread_mutex_init(pthread_mutex_t *mutex, const void *attr) {
     (void)attr;

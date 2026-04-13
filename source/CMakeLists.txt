@@ -55,41 +55,64 @@ add_custom_target(generate_xxd DEPENDS "${PARAM_DEFAULT_XXD}")
 # ---------- htslib sources ----------
 set(HTSLIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/htslib")
 set(HTSLIB_SOURCES
+    # Core htslib 1.21
     ${HTSLIB_DIR}/kfunc.c
-    ${HTSLIB_DIR}/knetfile.c
     ${HTSLIB_DIR}/kstring.c
+    ${HTSLIB_DIR}/bcf_sr_sort.c
     ${HTSLIB_DIR}/bgzf.c
+    ${HTSLIB_DIR}/errmod.c
     ${HTSLIB_DIR}/faidx.c
+    ${HTSLIB_DIR}/header.c
     ${HTSLIB_DIR}/hfile.c
-    ${HTSLIB_DIR}/hfile_net.c
     ${HTSLIB_DIR}/hts.c
+    ${HTSLIB_DIR}/hts_expr.c
+    ${HTSLIB_DIR}/hts_os.c
+    ${HTSLIB_DIR}/md5.c
+    ${HTSLIB_DIR}/multipart.c
+    ${HTSLIB_DIR}/probaln.c
+    ${HTSLIB_DIR}/realn.c
+    ${HTSLIB_DIR}/regidx.c
+    ${HTSLIB_DIR}/region.c
     ${HTSLIB_DIR}/sam.c
+    ${HTSLIB_DIR}/sam_mods.c
     ${HTSLIB_DIR}/synced_bcf_reader.c
     ${HTSLIB_DIR}/vcf_sweep.c
     ${HTSLIB_DIR}/tbx.c
+    ${HTSLIB_DIR}/textutils.c
+    ${HTSLIB_DIR}/thread_pool.c
     ${HTSLIB_DIR}/vcf.c
     ${HTSLIB_DIR}/vcfutils.c
+    # CRAM
     ${HTSLIB_DIR}/cram/cram_codecs.c
     ${HTSLIB_DIR}/cram/cram_decode.c
     ${HTSLIB_DIR}/cram/cram_encode.c
+    ${HTSLIB_DIR}/cram/cram_external.c
     ${HTSLIB_DIR}/cram/cram_index.c
     ${HTSLIB_DIR}/cram/cram_io.c
-    ${HTSLIB_DIR}/cram/cram_samtools.c
     ${HTSLIB_DIR}/cram/cram_stats.c
-    ${HTSLIB_DIR}/cram/files.c
     ${HTSLIB_DIR}/cram/mFILE.c
-    ${HTSLIB_DIR}/cram/md5.c
     ${HTSLIB_DIR}/cram/open_trace_file.c
     ${HTSLIB_DIR}/cram/pooled_alloc.c
-    ${HTSLIB_DIR}/cram/sam_header.c
     ${HTSLIB_DIR}/cram/string_alloc.c
-    ${HTSLIB_DIR}/cram/thread_pool.c
-    ${HTSLIB_DIR}/cram/vlen.c
-    ${HTSLIB_DIR}/cram/zfio.c
+    # htscodecs (bundled)
+    ${HTSLIB_DIR}/htscodecs/htscodecs/arith_dynamic.c
+    ${HTSLIB_DIR}/htscodecs/htscodecs/fqzcomp_qual.c
+    ${HTSLIB_DIR}/htscodecs/htscodecs/htscodecs.c
+    ${HTSLIB_DIR}/htscodecs/htscodecs/pack.c
+    ${HTSLIB_DIR}/htscodecs/htscodecs/rANS_static4x16pr.c
+    ${HTSLIB_DIR}/htscodecs/htscodecs/rANS_static32x16pr.c
+    ${HTSLIB_DIR}/htscodecs/htscodecs/rANS_static32x16pr_avx2.c
+    ${HTSLIB_DIR}/htscodecs/htscodecs/rANS_static32x16pr_avx512.c
+    ${HTSLIB_DIR}/htscodecs/htscodecs/rANS_static32x16pr_sse4.c
+    ${HTSLIB_DIR}/htscodecs/htscodecs/rANS_static32x16pr_neon.c
+    ${HTSLIB_DIR}/htscodecs/htscodecs/rANS_static.c
+    ${HTSLIB_DIR}/htscodecs/htscodecs/rle.c
+    ${HTSLIB_DIR}/htscodecs/htscodecs/tokenise_name3.c
+    ${HTSLIB_DIR}/htscodecs/htscodecs/utils.c
 )
 
 add_library(hts STATIC ${HTSLIB_SOURCES})
-target_include_directories(hts PUBLIC ${HTSLIB_DIR} ${HTSLIB_DIR}/htslib)
+target_include_directories(hts PUBLIC ${HTSLIB_DIR} ${HTSLIB_DIR}/htslib ${HTSLIB_DIR}/htscodecs)
 target_compile_definitions(hts PRIVATE SAMTOOLS=1)
 target_link_libraries(hts PRIVATE ZLIB::ZLIB)
 if(DEFINED ZLIB_INCLUDE_DIRS)
