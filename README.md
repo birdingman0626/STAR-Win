@@ -121,21 +121,14 @@ cmake -B build -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DSTAR_LONG_READS
 cmake -B build -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DSTAR_USE_AVX2=OFF
 ```
 
-**Windows performance:** ~518 M reads/hr with 12 threads on MSVC (vs ~728 M/hr on Linux GCC). The 1.4x gap is primarily due to MSVC's OpenMP 2.0 limitation.
+**Benchmarked performance** (434M reads, STARsolo CB_UMI_Simple, cynomolgus macaque genome):
 
-**Windows limitations:**
-  * Shared memory genome loading (`--genomeLoad LoadAndKeep/Remove`) is not supported; only `--genomeLoad NoSharedMemory` (the default) is available
-  * `--readFilesCommand` uses temporary files instead of FIFO pipes
+| Compiler | Speed | Hardware | OS |
+|----------|:-----:|----------|-----|
+| MSVC `/O2 /GL /LTCG` | 518 M/hr | Intel Core Ultra 5 235, 96GB DDR5, 12 threads | Windows 11 |
+| Intel ICX `/O2` | 500 M/hr | Intel Core Ultra 5 235, 96GB DDR5, 12 threads | Windows 11 |
 
-**Compiler performance comparison** (434M reads, cynomolgus macaque, 12 threads):
-
-| Compiler | Mapping Speed | OpenMP | Notes |
-|----------|:------------:|:------:|-------|
-| Linux GCC `-O3` | 728 M/hr | 4.5+ | Reference (upstream STAR) |
-| Windows MSVC `/O2 /GL /LTCG` | 518 M/hr | 2.0 | 1.4x slower than Linux |
-| Windows Intel ICX `/O2` | 500 M/hr | 5.1 | ~3% slower than MSVC |
-
-ICX's OpenMP 5.1 and better auto-vectorizer provide no benefit because STAR's bottleneck is memory-latent suffix array binary search, not vectorizable compute. Both Windows compilers produce identical alignment results.
+ICX's OpenMP 5.1 provides no measurable benefit because STAR's bottleneck is memory-latent suffix array binary search, not vectorizable compute. Both compilers produce identical alignment results.
 
 **Output compatibility** (validated on 434M-read STARsolo dataset):
 
@@ -147,7 +140,9 @@ ICX's OpenMP 5.1 and better auto-vectorizer provide no benefit because STAR's bo
 
 The EM differences are in the last decimal place (e.g. `1.99063` vs `1.99062`) of multi-mapper probability weights. MSVC differs in 14 of 9.97M Gene entries and 22 of 13.87M GeneFull entries (<0.001%). ICX differs in 506/466 entries (<0.005%) due to Clang-based floating-point codegen diverging more from GCC. These do not affect biological conclusions — cell counts, UMI counts, gene counts, and all filtered matrices are exact matches across all three compilers.
 
-**Note on speed comparison:** The Linux baseline (728 M/hr) was measured on AMD Ryzen 7 5825U (Zen 3, 16MB L3), while Windows numbers (510-518 M/hr) were on Intel Core Ultra 5 235 (Arrow Lake, 12MB L3). The ~1.4x gap is primarily CPU/cache difference, not compiler difference. MSVC and ICX on the same hardware differ by only ~3%.
+**Windows limitations:**
+  * Shared memory genome loading (`--genomeLoad LoadAndKeep/Remove`) is not supported; only `--genomeLoad NoSharedMemory` (the default) is available
+  * `--readFilesCommand` uses temporary files instead of FIFO pipes
 
 All platforms - non-standard gcc
 --------------------------------
