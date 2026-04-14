@@ -2,6 +2,7 @@
 `workflow/260412-release-validation-test.md` - Release validation: smoke test (1M reads) + full test (434M reads) procedures
 
 ## Active Work
+`workflow/260414-star-webui-llamacpp-stack.md` - WebUI: built-in HTTP browser UI for job submission/monitoring (Phases 0-2 complete; Phases 3-4 pending)
 `workflow/260413-algorithmic-optimizations-retry.md` - Algorithmic optimizations: FastResetVector, safe early rejection, EmptyDrops, Union-Find
 `workflow/260413-ggpeti-chimscore-cherry-pick-plan.md` - ggPeti chimeric bugfixes: block overlap, exon selection, trimming, roStart fix (Phase 1 done; Phase 2 regression tests pending)
 

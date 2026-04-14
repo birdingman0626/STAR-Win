@@ -40,6 +40,44 @@ DIRECTORY CONTENTS
   * bin: pre-compiled executables for Linux and Mac OS X
   * doc: documentation
   * extras: miscellaneous files and scripts
+  * docs/webui: screenshots and Web UI documentation
+
+WEB UI
+======
+
+STAR ships with a built-in browser interface for submitting and monitoring alignment jobs without using the command line. Start it with:
+
+```bash
+STAR.exe --runMode webui --webuiPort 8080 --outFileNamePrefix /path/to/output/
+```
+
+Then open `http://127.0.0.1:8080` in your browser.
+
+**Job submission form** — configure genome directory, FASTQ input files, STARsolo cell chemistry, quantification mode, and output settings. A live command preview shows the exact STAR command that will run.
+
+![STAR WebUI job submission form](docs/webui/webui-form.png)
+
+**Job queue** — lists submitted jobs with state (queued / running / succeeded / failed / cancelled), output directory, timestamps, and duration. Log and report links appear when a job completes.
+
+![STAR WebUI full page with jobs table](docs/webui/webui-jobs.png)
+
+**Features:**
+  * Supports `alignReads`, `genomeGenerate`, and `soloCellFiltering` run modes
+  * STARsolo chemistry presets (10x v2/v3, Drop-seq, SHARE-seq, custom)
+  * Live command preview before submission
+  * Tooltips on every parameter
+  * Auto-detects STAR genome indexes and CellRanger reference directories
+  * Generates an HTML QC report on job completion (opt-in, on by default)
+  * Defaults thread count to the number of logical CPU cores on the server machine
+  * Binds to `127.0.0.1` only (local use); change with `--webuiHost`
+
+**Web UI options:**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--webuiPort` | `8080` | TCP port to listen on |
+| `--webuiHost` | `127.0.0.1` | Bind address |
+| `--outFileNamePrefix` | (required) | Default output directory prefix shown in the form |
 
 COMPILING FROM SOURCE
 =====================
@@ -250,6 +288,14 @@ FORK CHANGES
   * Missing `#include <numeric>` added for MSVC compatibility
   * Missing mutex initializations fixed (portability bug in upstream)
   * OpenMP loop variables changed to signed types (MSVC OpenMP 2.0 compliance)
+
+### Web UI (new)
+  * Built-in HTTP server (`--runMode webui`) for job submission and monitoring
+  * Browser-based form for `alignReads`, `genomeGenerate`, and `soloCellFiltering`
+  * STARsolo chemistry presets and live command preview
+  * Job queue with state tracking, log tailing, and HTML QC report generation
+  * Pure C++ implementation using cpp-httplib + nlohmann/json; no Node.js required
+  * Child-process execution model keeps the server stable across run failures
 
 ### Performance Optimizations
   * MSVC compiler: `/O2 /Ob2 /Oi /GL` with `/LTCG` link-time optimization (Windows)
