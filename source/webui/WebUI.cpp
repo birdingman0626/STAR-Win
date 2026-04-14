@@ -353,6 +353,14 @@ buildArgs(const json& b, std::string& err) {
         }
     }
 
+    // Extra verbatim args (e.g. --legacy)
+    if (b.contains("extraArgs") && b["extraArgs"].is_string()) {
+        const std::string extra = b["extraArgs"].get<std::string>();
+        std::istringstream iss(extra);
+        std::string tok;
+        while (iss >> tok) args.push_back(tok);
+    }
+
     return {args, outPrefix};
 }
 

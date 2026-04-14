@@ -238,11 +238,12 @@ R"HTML(
 
     <!-- soloFeatures / multiMapper / cellFilter -->
     <div class="row" id="soloFeatRow" style="display:none">
-      <div class="field" data-tip="Gene: counts reads overlapping exons (spliced RNA). GeneFull: counts reads over the full gene body including introns (use for single-nucleus RNA-seq). SJ: splice junction counts. Velocyto: spliced/unspliced/ambiguous counts for RNA velocity.">
+      <div class="field" data-tip="Gene: counts reads overlapping exons (spliced RNA). GeneFull: counts over full gene body including introns (snRNA-seq). GeneFull_Ex50pAS: like GeneFull but requires >=50% read overlap with annotated sequence (reduces noise). SJ: splice junction counts. Velocyto: spliced/unspliced/ambiguous counts for RNA velocity.">
         <label>soloFeatures</label>
         <div class="checks">
           <label><input type="checkbox" class="sfeat" value="Gene" checked> Gene</label>
           <label><input type="checkbox" class="sfeat" value="GeneFull"> GeneFull</label>
+          <label><input type="checkbox" class="sfeat" value="GeneFull_Ex50pAS"> GeneFull_Ex50pAS</label>
           <label><input type="checkbox" class="sfeat" value="SJ"> SJ</label>
           <label><input type="checkbox" class="sfeat" value="Velocyto"> Velocyto</label>
         </div>
@@ -292,6 +293,12 @@ R"HTML(
         <div class="field" style="flex:0 0 220px" data-tip="RAM limit for BAM coordinate sorting in bytes. 0 = auto-detect from available memory. For large genomes you may need to set this explicitly, e.g. 20000000000 for 20 GB. Increase if sorting fails with an out-of-memory error.">
           <label>limitBAMsortRAM (bytes, 0=auto)</label>
           <input id="limitBAMsortRAM" type="number" value="0" min="0">
+        </div>
+      </div>
+      <div class="row" style="margin-top:4px">
+        <div class="field" style="flex:1" data-tip="Extra STAR arguments appended verbatim to the command line (space-separated). Examples: --legacy (use upstream 2.7.11b algorithm variants), --chimSegmentMin 20 (enable chimeric output).">
+          <label>Extra STAR arguments</label>
+          <input id="extraArgs" type="text" placeholder="e.g. --legacy  or  --chimSegmentMin 20">
         </div>
       </div>
     </details>
@@ -565,6 +572,9 @@ function buildCmd() {
   const limitRAM = parseInt(document.getElementById('limitBAMsortRAM').value)||0;
   if (limitRAM > 0) flag('limitBAMsortRAM', limitRAM);
 
+  const extraArgs = document.getElementById('extraArgs').value.trim();
+  if (extraArgs) extraArgs.split(/\s+/).forEach(t => args.push(t));
+
   const gtf = document.getElementById('gtf').value.trim();
   if (gtf) flag('sjdbGTFfile', gtf);
 
@@ -639,6 +649,7 @@ document.getElementById('jform').addEventListener('submit', async e=>{
     genomeSAindexNbases:    runMode2==='genomeGenerate' ? parseInt(document.getElementById('genomeSAindexNbases').value)||14 : 14,
     sjdbOverhang:           runMode2==='genomeGenerate' ? parseInt(document.getElementById('sjdbOverhang').value)||100 : 100,
     generateReport:         document.getElementById('generateReport').checked,
+    extraArgs:              document.getElementById('extraArgs').value.trim(),
     ...chemParams,
   };
   if (readFilesIn.length) body.readFilesIn = readFilesIn;
