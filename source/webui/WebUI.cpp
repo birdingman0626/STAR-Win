@@ -60,6 +60,11 @@ struct Job {
 static std::map<int, Job> g_jobs;
 static std::mutex         g_mu;
 static std::atomic<int>   g_nextId{1};
+static std::string        g_persistPath;   // path to .webui_jobs.jsonl (set in run())
+static std::chrono::steady_clock::time_point g_startTime = std::chrono::steady_clock::now();
+
+// Bounded queue limits: 1 running + up to MAX_QUEUED waiting
+static constexpr int MAX_QUEUED = 9;
 
 // ─────────────────────────────────────────────────────────────────────
 // Helpers
@@ -131,6 +136,163 @@ static std::string joinPath(const std::string& a, const std::string& b) {
     return (last == '/' || last == '\\') ? a + b : a + "/" + b;
 }
 
+// Detect path traversal: reject if the normalized path contains a ".." component.
+static bool hasPathTraversal(const std::string& p) {
+    // Check for /../ or leading ../ or trailing /..
+    std::string n = p;
+    // Normalize backslashes for uniform check
+    for (char& c : n) if (c == '\\') c = '/';
+    // Look for /../ sequences or boundary cases
+    if (n.find("/../") != std::string::npos) return true;
+    if (n.size() >= 3 && n.substr(0, 3) == "../") return true;
+    if (n.size() >= 3 && n.substr(n.size()-3) == "/..") return true;
+    if (n == "..") return true;
+    return false;
+}
+
+// Append a terminal job record to the persistence file (call with g_mu held).
+static void persistJob(const Job& j) {
+    if (g_persistPath.empty()) return;
+    std::ofstream f(g_persistPath, std::ios::app);
+    if (!f) return;
+    json rec = {
+        {"id",           j.id},
+        {"state",        j.state},
+        {"runMode",      j.runMode},
+        {"cmdLine",      j.cmdLine},
+        {"outputPrefix", j.outputPrefix},
+        {"submitTime",   j.submitTime},
+        {"startTime",    j.startTime},
+        {"endTime",      j.endTime},
+        {"exitCode",     j.exitCode},
+        {"reportPath",   j.reportPath},
+        {"generateReport", j.generateReport},
+    };
+    f << rec.dump() << "\n";
+}
+
+// Load historical jobs from the persistence file into g_jobs.
+static void loadPersistedJobs(const std::string& path) {
+    std::ifstream f(path);
+    if (!f) return;
+    std::string line;
+    while (std::getline(f, line)) {
+        if (line.empty()) continue;
+        try {
+            json rec = json::parse(line);
+            std::string prefix = rec.value("outputPrefix", "");
+            // Only restore if the output directory still exists
+            if (!prefix.empty() && !pathExists(prefix)) continue;
+            Job j;
+            j.id           = rec.value("id", 0);
+            j.state        = rec.value("state", "failed");
+            j.runMode      = rec.value("runMode", "");
+            j.cmdLine      = rec.value("cmdLine", "");
+            j.outputPrefix = prefix;
+            j.submitTime   = rec.value("submitTime", "");
+            j.startTime    = rec.value("startTime", "");
+            j.endTime      = rec.value("endTime", "");
+            j.exitCode     = rec.value("exitCode", -1);
+            j.reportPath   = rec.value("reportPath", "");
+            j.generateReport = rec.value("generateReport", false);
+            if (j.id <= 0) continue;
+            g_jobs[j.id] = std::move(j);
+            // Advance the ID counter past restored IDs
+            int expected = j.id;
+            int next = expected + 1;
+            // CAS loop to update g_nextId
+            int cur = g_nextId.load();
+            while (cur <= expected) {
+                if (g_nextId.compare_exchange_weak(cur, next)) break;
+            }
+        } catch (...) { /* skip malformed lines */ }
+    }
+}
+
+// Recursively list files under dir with matching extensions (relative paths from dir),
+// up to maxEntries. Used for Solo.out artifact discovery.
+static void listDirRecursive(const std::string& base, const std::string& rel,
+                              const std::vector<std::string>& exts,
+                              std::vector<std::string>& out, int& count, int maxEntries) {
+    if (count >= maxEntries) return;
+    std::string dir = rel.empty() ? base : base + "/" + rel;
+    auto matches = [&](const std::string& name) {
+        for (const auto& e : exts)
+            if (name.size() >= e.size() && name.compare(name.size()-e.size(), e.size(), e) == 0)
+                return true;
+        return false;
+    };
+#ifdef _WIN32
+    WIN32_FIND_DATAA fd;
+    HANDLE h = FindFirstFileA((dir + "\\*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            if (strcmp(fd.cFileName,".") != 0 && strcmp(fd.cFileName,"..") != 0) {
+                std::string child = rel.empty() ? fd.cFileName : rel + "/" + fd.cFileName;
+                listDirRecursive(base, child, exts, out, count, maxEntries);
+            }
+        } else if (matches(fd.cFileName) && count < maxEntries) {
+            out.push_back(rel.empty() ? fd.cFileName : rel + "/" + fd.cFileName);
+            ++count;
+        }
+    } while (FindNextFileA(h, &fd) && count < maxEntries);
+    FindClose(h);
+#else
+    DIR* d = opendir(dir.c_str());
+    if (!d) return;
+    struct dirent* de;
+    while ((de = readdir(d)) && count < maxEntries) {
+        if (strcmp(de->d_name,".") == 0 || strcmp(de->d_name,"..") == 0) continue;
+        std::string child = rel.empty() ? de->d_name : rel + "/" + de->d_name;
+        std::string full  = base + "/" + child;
+        struct stat st;
+        if (stat(full.c_str(), &st) != 0) continue;
+        if (S_ISDIR(st.st_mode)) {
+            listDirRecursive(base, child, exts, out, count, maxEntries);
+        } else if (matches(de->d_name) && count < maxEntries) {
+            out.push_back(child);
+            ++count;
+        }
+    }
+    closedir(d);
+#endif
+}
+
+// Get file size in bytes, or -1 if not found.
+static int64_t fileSize(const std::string& p) {
+#ifdef _WIN32
+    WIN32_FIND_DATAA fd;
+    HANDLE h = FindFirstFileA(p.c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return -1;
+    FindClose(h);
+    ULARGE_INTEGER sz;
+    sz.LowPart  = fd.nFileSizeLow;
+    sz.HighPart = fd.nFileSizeHigh;
+    return (int64_t)sz.QuadPart;
+#else
+    struct stat st;
+    return (stat(p.c_str(), &st) == 0) ? (int64_t)st.st_size : -1;
+#endif
+}
+
+// Infer artifact type from filename.
+static std::string artifactType(const std::string& name) {
+    auto ends = [&](const char* suf) {
+        size_t sl = strlen(suf);
+        return name.size() >= sl && name.compare(name.size()-sl, sl, suf) == 0;
+    };
+    if (ends(".mtx"))  return "mtx";
+    if (ends(".tsv"))  return "tsv";
+    if (ends(".csv"))  return "csv";
+    if (ends(".bam"))  return "bam";
+    if (ends(".sam"))  return "sam";
+    if (ends(".tab"))  return "tab";
+    if (ends(".html")) return "html";
+    if (ends(".stats")) return "stats";
+    return "other";
+}
+
 // Returns files in dir whose names end with any of the given extensions.
 static std::vector<std::string> listByExt(const std::string& dir,
                                           const std::vector<std::string>& exts) {
@@ -163,8 +325,10 @@ static std::vector<std::string> listByExt(const std::string& dir,
 }
 
 static void writeReport(Job& job); // defined below
+static int  spawnJob(Job& job, const std::string& exe); // defined below
 
 static void pollRunning() {
+    bool anyFinished = false;
     for (auto& [id, job] : g_jobs) {
         if (job.state != "running") continue;
 #ifdef _WIN32
@@ -179,6 +343,8 @@ static void pollRunning() {
             job.state     = (ec == 0) ? "succeeded" : "failed";
             job.endTime   = nowISO();
             if (ec == 0 && job.generateReport) writeReport(job);
+            persistJob(job);
+            anyFinished = true;
         }
 #else
         int status = 0;
@@ -187,8 +353,30 @@ static void pollRunning() {
             job.state    = (job.exitCode == 0) ? "succeeded" : "failed";
             job.endTime  = nowISO();
             if (job.exitCode == 0 && job.generateReport) writeReport(job);
+            persistJob(job);
+            anyFinished = true;
         }
 #endif
+    }
+    // Promote a queued job if a slot opened up
+    if (anyFinished) {
+        int running = 0;
+        for (const auto& [id, j] : g_jobs)
+            if (j.state == "running") ++running;
+        if (running == 0) {
+            // Find the oldest queued job (lowest id)
+            int oldestId = -1;
+            for (const auto& [id, j] : g_jobs)
+                if (j.state == "queued" && (oldestId < 0 || id < oldestId))
+                    oldestId = id;
+            if (oldestId >= 0) {
+                Job& qj = g_jobs[oldestId];
+                qj.state     = "running";
+                qj.startTime = nowISO();
+                spawnJob(qj, starExePath());
+                qj.args.clear();
+            }
+        }
     }
 }
 
@@ -234,6 +422,11 @@ static void writeReport(Job& job) {
          "pre{background:#1e1e1e;color:#d4d4d4;padding:14px;border-radius:4px;"
          "font-family:Consolas,monospace;font-size:.78rem;white-space:pre-wrap;"
          "overflow-x:auto;margin:0;max-height:500px;overflow-y:auto}"
+         "table{width:100%;border-collapse:collapse;font-size:.85rem}"
+         "th{text-align:left;padding:7px 10px;border-bottom:2px solid #eee;color:#666;"
+         "font-size:.74rem;text-transform:uppercase;font-weight:700}"
+         "td{padding:7px 10px;border-bottom:1px solid #f0f0f0}"
+         "tr:hover td{background:#fafbff}"
          "</style></head><body>"
          "<header><h1>STAR Run Report</h1></header>"
          "<div class='wrap'>"
@@ -247,6 +440,26 @@ static void writeReport(Job& job) {
          "<span><b>Output:</b> " << esc(job.outputPrefix) << "</span>"
          "</div></div>"
          "<div class='card'><h2>Command</h2><pre>" << esc(job.cmdLine) << "</pre></div>";
+    // STARsolo summary table: parse Solo.out/Gene/Summary.csv if present
+    std::string summaryPath = job.outputPrefix + "Solo.out/Gene/Summary.csv";
+    std::ifstream sumF(summaryPath);
+    if (sumF) {
+        f << "<div class='card'><h2>STARsolo Gene Summary</h2>"
+             "<table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>";
+        std::string sline;
+        while (std::getline(sumF, sline)) {
+            if (sline.empty()) continue;
+            auto comma = sline.find(',');
+            std::string key = (comma != std::string::npos) ? sline.substr(0, comma) : sline;
+            std::string val = (comma != std::string::npos) ? sline.substr(comma+1) : "";
+            // strip CR
+            if (!key.empty() && key.back() == '\r') key.pop_back();
+            if (!val.empty() && val.back() == '\r') val.pop_back();
+            f << "<tr><td>" << esc(key) << "</td><td>" << esc(val) << "</td></tr>";
+        }
+        f << "</tbody></table></div>";
+    }
+
     if (!logFinal.empty())
         f << "<div class='card'><h2>Mapping Statistics (Log.final.out)</h2>"
              "<pre>" << esc(logFinal) << "</pre></div>";
@@ -279,6 +492,18 @@ buildArgs(const json& b, std::string& err) {
     std::string genomeDir = str("genomeDir");
     if (genomeDir.empty() && runMode != "soloCellFiltering") {
         err = "Missing genomeDir"; return {};
+    }
+
+    // Path traversal check
+    if (hasPathTraversal(outPrefix) || hasPathTraversal(genomeDir)) {
+        err = "Path traversal rejected"; return {};
+    }
+    if (b.contains("readFilesIn") && b["readFilesIn"].is_array()) {
+        for (const auto& rfi : b["readFilesIn"]) {
+            if (rfi.is_string() && hasPathTraversal(rfi.get<std::string>())) {
+                err = "Path traversal rejected"; return {};
+            }
+        }
     }
 
     std::vector<std::string> args;
@@ -1101,6 +1326,15 @@ void WebUI::run() {
     httplib::Server srv;
     const std::string exe = starExePath();
 
+    // Phase 4.4: Set up persistence and restore historical jobs
+    {
+        std::string outDir = P.outFileNamePrefix;
+        if (!outDir.empty() && outDir.back() != '/' && outDir.back() != '\\') outDir += '/';
+        g_persistPath = outDir + ".webui_jobs.jsonl";
+        std::lock_guard<std::mutex> lk(g_mu);
+        loadPersistedJobs(g_persistPath);
+    }
+
     srv.Get("/",  [](const httplib::Request&, httplib::Response& res) {
         res.set_content(g_html, "text/html; charset=utf-8");
     });
@@ -1120,7 +1354,7 @@ void WebUI::run() {
             {"platform",     "linux"},
 #endif
             {"runModes",     json::array({"alignReads","genomeGenerate","soloCellFiltering","webui"})},
-            {"webuiVersion", 2},
+            {"webuiVersion", 4},
             {"cpuCount",     (int)std::thread::hardware_concurrency()},
             {"outDir",       P.outFileNamePrefix},
         };
@@ -1128,7 +1362,30 @@ void WebUI::run() {
     });
     if (P.webui.metrics) {
         srv.Get("/metrics", [](const httplib::Request&, httplib::Response& res) {
-            res.set_content("# STAR WebUI metrics\n", "text/plain; version=0.0.4");
+            std::lock_guard<std::mutex> lk(g_mu);
+            pollRunning();
+            int nQueued=0, nRunning=0, nSucceeded=0, nFailed=0, nCancelled=0;
+            for (const auto& [id, j] : g_jobs) {
+                if      (j.state == "queued")    ++nQueued;
+                else if (j.state == "running")   ++nRunning;
+                else if (j.state == "succeeded") ++nSucceeded;
+                else if (j.state == "failed")    ++nFailed;
+                else if (j.state == "cancelled") ++nCancelled;
+            }
+            auto upSec = std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::steady_clock::now() - g_startTime).count();
+            std::ostringstream ss;
+            ss << "# HELP star_jobs_total Number of STAR WebUI jobs by state\n"
+               << "# TYPE star_jobs_total gauge\n"
+               << "star_jobs_total{state=\"queued\"} "    << nQueued    << "\n"
+               << "star_jobs_total{state=\"running\"} "   << nRunning   << "\n"
+               << "star_jobs_total{state=\"succeeded\"} " << nSucceeded << "\n"
+               << "star_jobs_total{state=\"failed\"} "    << nFailed    << "\n"
+               << "star_jobs_total{state=\"cancelled\"} " << nCancelled << "\n"
+               << "# HELP star_server_uptime_seconds Seconds since server start\n"
+               << "# TYPE star_server_uptime_seconds counter\n"
+               << "star_server_uptime_seconds " << upSec << "\n";
+            res.set_content(ss.str(), "text/plain; version=0.0.4; charset=utf-8");
         });
     }
 
@@ -1225,22 +1482,43 @@ void WebUI::run() {
             return;
         }
         Job job;
-        job.id           = g_nextId.fetch_add(1);
-        job.state        = "running";
-        job.runMode      = body.value("runMode","");
-        job.outputPrefix = outPrefix;
-        job.submitTime   = nowISO();
-        job.startTime    = job.submitTime;
-        job.args         = std::move(args);
+        job.id             = g_nextId.fetch_add(1);
+        job.runMode        = body.value("runMode","");
+        job.outputPrefix   = outPrefix;
+        job.submitTime     = nowISO();
+        job.generateReport = body.value("generateReport", true);
+        job.args           = std::move(args);
         {
             std::lock_guard<std::mutex> lk(g_mu);
+            // Count running and queued jobs
+            int running = 0, queued = 0;
+            for (const auto& [jid, jj] : g_jobs) {
+                if (jj.state == "running") ++running;
+                else if (jj.state == "queued") ++queued;
+            }
+            if (running >= 1 && queued >= MAX_QUEUED) {
+                res.status = 429;
+                res.set_content(json{{"error","Job queue full"}}.dump(), "application/json");
+                return;
+            }
+            if (running >= 1) {
+                // Queue the job instead of spawning immediately
+                job.state = "queued";
+                int jobId = job.id;
+                g_jobs[jobId] = std::move(job);
+                res.status = 201;
+                res.set_content(jobToJson(g_jobs[jobId]).dump(2), "application/json");
+                return;
+            }
+            // Spawn immediately
+            job.state     = "running";
+            job.startTime = job.submitTime;
             int rc = spawnJob(job, exe);
             if (rc != 0) {
                 res.status = 500;
                 res.set_content(json{{"error","Failed to spawn process (code "+std::to_string(rc)+")"}}.dump(), "application/json");
                 return;
             }
-            job.generateReport = body.value("generateReport", true);
             int jobId = job.id;
             job.args.clear();  // args consumed by spawnJob; free memory
             g_jobs[jobId] = std::move(job);
@@ -1279,6 +1557,7 @@ void WebUI::run() {
             if (j.pid > 0) kill(j.pid, SIGTERM);
 #endif
             j.state="cancelled"; j.endTime=nowISO();
+            persistJob(j);
         }
         res.set_content(jobToJson(j).dump(2), "application/json");
     });
@@ -1309,6 +1588,43 @@ void WebUI::run() {
         std::string html = readFileTail(rpath, 2*1024*1024);
         if (html.empty()) { res.status=404; res.set_content("Report file missing","text/plain"); return; }
         res.set_content(html, "text/html; charset=utf-8");
+    });
+
+    // Phase 3: artifact discovery endpoint
+    srv.Get(R"(/jobs/(\d+)/artifacts)", [](const httplib::Request& req, httplib::Response& res) {
+        int id = std::stoi(req.matches[1]);
+        std::string prefix;
+        { std::lock_guard<std::mutex> lk(g_mu);
+          auto it = g_jobs.find(id);
+          if (it == g_jobs.end()) { res.status=404; res.set_content(json{{"error","Not found"}}.dump(),"application/json"); return; }
+          prefix = it->second.outputPrefix; }
+
+        json arr = json::array();
+        auto addFile = [&](const std::string& relName) {
+            std::string full = prefix + relName;
+            int64_t sz = fileSize(full);
+            if (sz < 0) return;
+            arr.push_back({{"name", relName}, {"size", sz}, {"type", artifactType(relName)}});
+        };
+
+        // Recurse into Solo.out/ for .tsv, .mtx, .csv, .stats files
+        std::string soloDir = prefix + "Solo.out";
+        if (isDirectory(soloDir)) {
+            std::vector<std::string> soloFiles;
+            int count = 0;
+            listDirRecursive(soloDir, "", {".tsv",".mtx",".csv",".stats"}, soloFiles, count, 100);
+            for (const auto& f : soloFiles)
+                addFile("Solo.out/" + f);
+        }
+
+        // Top-level known files
+        for (const char* name : {"Aligned.sortedByCoord.out.bam", "Aligned.out.bam",
+                                  "Aligned.out.sam", "SJ.out.tab",
+                                  "Log.final.out", "Log.out", "WebUI_Report.html"}) {
+            addFile(name);
+        }
+
+        res.set_content(arr.dump(2), "application/json");
     });
 
     std::string host = P.webui.host;
