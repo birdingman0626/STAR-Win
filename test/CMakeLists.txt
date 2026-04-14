@@ -29,6 +29,9 @@ add_executable(star_tests
     unit/test_binarySearch2.cpp
     unit/test_PackedArray.cpp
     unit/test_UMIgraph.cpp
+    unit/test_blocksOverlap.cpp
+    unit/test_EmptyDrops.cpp
+    unit/test_UMIgraph_directedCollapse.cpp
     ${STAR_TEST_SOURCES}
 )
 
