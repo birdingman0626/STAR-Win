@@ -333,8 +333,13 @@ FORK CHANGES
   * Differential validation harness (`scripts/validate_build.sh`): build + version + 1M-read smoke comparison
   * Makefile OBJECTS bug fix (7 entries had `.cpp` instead of `.o`)
 
-### Dependency Upgrades
-  * Bundled HTSlib upgraded from 1.3 (2016) to 1.21 (2024) with bundled htscodecs
+### Dependency Changes
+  * **HTSlib** upgraded from 1.3 (2016) to 1.21 (2024) with bundled htscodecs; Windows-specific patches re-applied
+  * **Opal** (abandoned 2015, AVX2-only via SIMDe) replaced with **Parasail v2.6.2** (active, native SSE2/SSE4.1/AVX2/AVX-512/NEON); removes 3 vendored files (~25K lines of auto-generated SIMD headers); Parasail is fetched at build time via CMake FetchContent, not bundled in the repo
+  * **SIMDe** (`source/opal/simde_avx2.h`, 1.3 MB auto-generated header) removed as a direct consequence of the Opal → Parasail migration; Parasail provides its own SIMD abstraction
+  * **zlib** already at 1.3.2 (the latest release); no change needed
+  * **USE_SYSTEM_HTSLIB** CMake option added (`-DUSE_SYSTEM_HTSLIB=ON`) for Linux/macOS packagers who prefer the system htslib via pkg-config instead of the bundled copy
+  * **SimpleGoodTuring**: removed MSVC 6.0-era `#define MinInput` workaround, replaced with `constexpr`; removed `using namespace std` from header
 
 ### Evaluated and Rejected
   * **CUDA GPU acceleration**: Tested on RTX PRO 6000 Blackwell (96GB VRAM). STAR's bottleneck is memory-latent suffix array search, not parallelizable compute. GPU overhead exceeded the gains.
