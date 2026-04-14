@@ -32,9 +32,9 @@ runRNGseed                      777
     int: random number generator seed.
 
 legacy                          None
-    string: enable legacy (upstream STAR 2.7.11b) algorithm variants.
-                                None            ... use current algorithms (default)
-                                ChimericScoring ... use upstream chimeric overlap/exon-selection algorithm; produces output byte-identical to STAR 2.7.11b
+    string: enable all legacy (upstream STAR 2.7.11b) algorithm variants; specify without a value to activate.
+                                None  ... use current algorithms (default)
+                                True  ... restore 2.7.11b behavior for all result-affecting algorithm changes
 
 ### Genome Parameters
 genomeDir                   ./GenomeDir/

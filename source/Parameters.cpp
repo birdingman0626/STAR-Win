@@ -352,7 +352,18 @@ void Parameters::inputParameters (int argInN, char* argIn[]) {//input parameters
                 };
                 commandLineFile += '\n' + key + ' ' + val;
             } else if (oneArg.substr(0,2)=="--") {//parameter name, cut --
-                commandLineFile +='\n' + oneArg.substr(2);
+                string paramName = oneArg.substr(2);
+                commandLineFile +='\n' + paramName;
+                // Boolean flags: no value expected; inject "True" when flag stands alone.
+                // Add new boolean flag names here as needed.
+                static const string boolFlags[] = {"legacy"};
+                for (const auto &bf : boolFlags) {
+                    if (paramName == bf) {
+                        bool nextIsValue = (iarg + 1 < argInN) && string(argIn[iarg+1]).substr(0,2) != "--";
+                        if (!nextIsValue) commandLineFile += " True";
+                        break;
+                    }
+                }
             } else {//parameter value
                 if (oneArg.find_first_of(" \t")!=std::string::npos) {//there is white space in the argument, put "" around
                     oneArg ='\"'  + oneArg +'\"';
