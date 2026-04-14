@@ -390,6 +390,7 @@ set(STAR_SOURCES
     bamRemoveDuplicates.cpp
     BAMbinSortUnmapped.cpp
     webui/WebUI.cpp
+    webui/WebUI_report.cpp
 )
 
 # Prepend source directory
