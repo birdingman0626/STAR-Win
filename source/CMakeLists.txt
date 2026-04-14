@@ -78,6 +78,19 @@ FetchContent_Declare(parasail
 )
 FetchContent_MakeAvailable(parasail)
 set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_SAVED} CACHE BOOL "" FORCE)
+
+# Parasail builds its own test/app executables unconditionally. Exclude them from
+# the default ALL target so they don't cause build failures on newer compilers
+# (e.g. test_verify_traces fails with GCC 15 on macOS due to int8_t* / int* mismatch).
+# test_verify is kept as an explicit build target for CTest (see below).
+foreach(_pt IN ITEMS
+        test_verify_tables test_verify_rowcols test_verify_traces test_verify_cigars
+        parasail_aligner parasail_stats)
+    if(TARGET ${_pt})
+        set_target_properties(${_pt} PROPERTIES EXCLUDE_FROM_ALL TRUE)
+    endif()
+endforeach()
+
 # Parasail's test_verify registers a CTest entry using ${CMAKE_SOURCE_DIR}/data/... which,
 # under FetchContent, resolves to the STAR source dir rather than the parasail source dir.
 # Copy the required test fixture to the location the test expects.
