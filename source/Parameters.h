@@ -382,5 +382,12 @@ class Parameters {
     void readSAMheader(const string readFilesCommandString, const vector<string> readFilesNames);
     void samAttributes();
     void samAttrRequiresBAM(bool attrYes, string attrTag);
+
+private:
+    // Private helpers called from the constructor and inputParameters()
+    void registerParameters();                        // Parameters_register.cpp
+    void inputParameters_parseSources(int argInN, char* argIn[]); // Parameters_inputSources.cpp
+    void inputParameters_runtimeSetup();              // Parameters_runtimeSetup.cpp
+    void inputParameters_validate();                  // Parameters_validateInput.cpp
 };
 #endif  // Parameters.h

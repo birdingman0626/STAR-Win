@@ -294,6 +294,10 @@ set(STAR_SOURCES
     PackedArray.cpp
     SuffixArrayFuns.cpp
     Parameters.cpp
+    Parameters_register.cpp
+    Parameters_inputSources.cpp
+    Parameters_runtimeSetup.cpp
+    Parameters_validateInput.cpp
     Parameters_samAttributes.cpp
     InOutStreams.cpp
     SequenceFuns.cpp

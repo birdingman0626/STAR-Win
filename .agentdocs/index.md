@@ -17,6 +17,7 @@
 `workflow/done/260413-project-hygiene-improvements.md` - Project hygiene: test data bundling, validation scripts, doc consolidation
 
 ## Completed (Implementation Done)
+`workflow/done/260414-large-file-breakdown-plan.md` - Parameters.cpp split: 1286-line file broken into 5 focused files (all ≤515 lines)
 `workflow/done/260413-dependency-minimization.md` - Dependency minimization: Opal→Parasail, optional system HTSlib, dependency inventory
 `workflow/done/260412-windows-port.md` - Windows MSVC native build support
 `workflow/done/260412-windows-perf-bottleneck.md` - Windows perf: 206 → 518 M/hr (2.5x improvement, Phases 1-5)
