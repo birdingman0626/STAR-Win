@@ -116,19 +116,18 @@ Use plain HTML/CSS/JS with bundled static assets. Do not introduce React/Vite un
 - Surface Windows-specific limitations from `README.md` and `source/Parameters.cpp`
 - Keep Phase 2 assets framework-free unless a concrete limitation appears
 
-### Phase 3: STARsolo integration
+### Phase 3: STARsolo integration [DONE]
 
-- Detect `Solo.out` outputs and offer report generation
-- Replace the current shell-report dependency with an internal or bundled-asset implementation
-- Keep the report offline-capable; do not depend on CDN assets
-- Prefer tiny local charting or server-rendered summaries over large JS visualization bundles
+- `GET /jobs/:id/artifacts` endpoint discovers Solo.out/ (recursive, max 100 entries of .tsv/.mtx/.csv/.stats), BAM/SAM, SJ.out.tab, Log files, WebUI_Report.html
+- `writeReport()` enhanced: if `Solo.out/Gene/Summary.csv` exists, an HTML table of key/value metrics is injected before the mapping stats section
+- Report is fully offline (no CDN links); uses same existing style rules
 
-### Phase 4: Hardening
+### Phase 4: Hardening [DONE]
 
-- Add cancellation cleanup for temp and output files
-- Add path validation and local-only default binding
-- Add basic metrics and bounded queueing
-- Add crash recovery for interrupted server restarts
+- Path traversal validation in `buildArgs()`: rejects `..` path components in outFileNamePrefix, genomeDir, readFilesIn with HTTP 400 `{"error":"Path traversal rejected"}`
+- Bounded queue: 1 running + up to 9 queued; POST /jobs returns HTTP 429 `{"error":"Job queue full"}` when full; queued jobs are promoted automatically when a running job finishes
+- `GET /metrics` (when `P.webui.metrics == true`): Prometheus-style plain-text with per-state job gauges and `star_server_uptime_seconds`
+- State persistence: terminal jobs (succeeded/failed/cancelled) are appended as JSON lines to `{outDir}/.webui_jobs.jsonl`; on startup the file is read and jobs whose outputPrefix still exists are restored into `g_jobs`
 
 ## Verification Plan
 

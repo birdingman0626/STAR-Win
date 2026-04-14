@@ -292,8 +292,14 @@ FORK CHANGES
 ### Web UI (new)
   * Built-in HTTP server (`--runMode webui`) for job submission and monitoring
   * Browser-based form for `alignReads`, `genomeGenerate`, and `soloCellFiltering`
-  * STARsolo chemistry presets and live command preview
+  * STARsolo chemistry presets (10x v2/v3, Drop-seq, SHARE-seq, custom) and live command preview
   * Job queue with state tracking, log tailing, and HTML QC report generation
+  * STARsolo artifact discovery: `GET /jobs/:id/artifacts` lists `Solo.out/`, BAM, SAM, `SJ.out.tab`
+  * `GET /metrics` Prometheus-format job counters and server uptime (enabled via `--webuiMetrics`)
+  * Path traversal protection rejects `..` components in all submitted paths
+  * Bounded queue: at most 1 running + 9 queued jobs; returns HTTP 429 when full
+  * Crash recovery: terminal job states persisted to `.webui_jobs.jsonl`; restored on server restart
+  * Tooltips on every parameter, auto-detect STAR genome indexes and CellRanger references
   * Pure C++ implementation using cpp-httplib + nlohmann/json; no Node.js required
   * Child-process execution model keeps the server stable across run failures
 
@@ -311,13 +317,20 @@ FORK CHANGES
 ### Bug Fixes (applicable to all platforms)
   * Initialize all `pthread_mutex_t` members in `ThreadControl` (upstream only initialized 8 of 11)
   * Fix `stitchAlignToTranscript` declaration/definition `const` mismatch
+  * Chimeric alignment fixes (cherry-picked from ggPeti/STAR `feat/chimScoreUsePostStitch`):
+    - Block-based chimeric overlap replaces scalar single-interval check for multi-exon layouts
+    - Better exon-pair selection for chimeric junctions (overlapping cross-reference exon, not just first/last)
+    - Trim stitched transcripts to the junction-relevant side before rescoring
+    - Fix cross-mate `roStart` computation (`a2.Lread` instead of `a1.Lread` on negative strand)
 
 ### Project Quality
   * C++17 standard (upgraded from C++11)
   * GitHub Actions CI (Linux GCC/Clang, macOS, Windows MSVC)
   * Dockerfile for reproducible builds
   * `.clang-tidy`, `.clang-format`, `.editorconfig` configs
-  * CTest integration
+  * doctest unit tests: `PackedArray`, `binarySearch2`, `FastResetVector`, UMI graph connected-components and directed-collapse, `blocksOverlap`, EmptyDrops p-value counting, barcode/UMI parsing
+  * CTest integration with `STAR_BUILD_TESTS=ON` (default)
+  * Differential validation harness (`scripts/validate_build.sh`): build + version + 1M-read smoke comparison
   * Makefile OBJECTS bug fix (7 entries had `.cpp` instead of `.o`)
 
 ### Dependency Upgrades
