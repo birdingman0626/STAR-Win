@@ -5,7 +5,6 @@ name: STAR CodeQL configuration
 # and fixed upstream; scanning them produces noise, not actionable findings.
 paths-ignore:
   - source/htslib       # bundled HTSlib 1.21 (upstream: samtools/htslib)
-  - source/opal         # bundled Opal aligner (upstream: Martinsos/opal)
   - source/SimpleGoodTuring  # bundled SGT implementation
 
 queries:
