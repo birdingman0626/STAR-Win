@@ -266,7 +266,7 @@ The speed gains come from three optimizations:
 | `GeneFull_Ex50pAS/UMIperCellSorted.txt` | 54/837K cells differ by ±1 UMI | ~50/837K cells differ by ±1 UMI |
 | `Barcodes.stats` | Identical | Identical |
 
-Cell barcodes, features, and filtered cell sets are unaffected in both modes. Pass `--legacy` to disable the chimeric bugfixes and use upstream 2.7.11b algorithm variants exactly.
+Cell barcodes, features, and filtered cell sets are unaffected in both modes. The remaining differences in both modes are caused by **MSVC vs GCC floating-point divergence** in the EM multi-mapper probability computation — not by any algorithm choice. This is irreducible on Windows: the two compilers evaluate the same IEEE 754 arithmetic in slightly different order, shifting a handful of borderline counts by ±1. Pass `--legacy` to additionally disable the chimeric bugfixes and branch-and-bound pruning, restoring upstream 2.7.11b algorithm behaviour (unique-mapping count matches upstream exactly; EM-matrix differences persist due to the compiler divergence).
 
 **Windows limitations:**
   * Shared memory genome loading (`--genomeLoad LoadAndKeep/Remove`) is not supported; only `--genomeLoad NoSharedMemory` (the default) is available
